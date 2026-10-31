@@ -43,6 +43,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: var(--font-body); font-size: 15px; line-height: 1.5;
@@ -137,6 +138,41 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
 .check input { margin-top: 4px; }
 .facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+.burn { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.burn .label { grid-column: 1 / -1; }
+@media (max-width: 480px) { .burn { grid-template-columns: minmax(0, 1fr); } }
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; align-self: flex-start; }
+.tab { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; font-weight: 500; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+
+.board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.side { border: 1px solid; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.side.player { background: var(--player-soft); border-color: var(--player); }
+.side.banker { background: var(--banker-soft); border-color: var(--banker); }
+.side-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
+.side.player .side-head { color: var(--player); }
+.side.banker .side-head { color: var(--banker); }
+.total { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.slot {
+  aspect-ratio: 5 / 7; max-width: 100%; min-width: 0; padding: 4px;
+  border: 1px dashed var(--muted); background: var(--surface); border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.slot .val { font-family: var(--font-display); font-size: 24px; font-weight: 700; line-height: 1; }
+.slot .ord { font-size: 11px; color: var(--muted); }
+.slot.filled { border-style: solid; border-color: var(--ink); }
+.slot.active { border: 2px solid var(--felt); box-shadow: 0 0 0 3px var(--felt-soft); }
+.slot.none { background: transparent; border-color: var(--line); color: var(--muted); font-size: 11px; text-align: center; line-height: 1.3; }
+.status { font-size: 14px; margin: 0; min-height: 21px; }
+.status .win-B { color: var(--banker); } .status .win-P { color: var(--player); } .status .win-T { color: var(--tie); }
+
+.hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 14px; }
+.hist li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding-block: 7px; border-bottom: 1px solid var(--line); }
+.hist .num { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.hist .hands { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.hist .p { color: var(--player); } .hist .b { color: var(--banker); }
+.hist .dot { width: 22px; height: 22px; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) { .fill { transition: none; } }
 </style>
 
@@ -150,43 +186,86 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     <div class="col">
       <section class="panel" aria-labelledby="h-cards">
         <div class="row spread">
-          <h2 id="h-cards">Cards dealt</h2>
+          <h2 id="h-cards">Enter cards</h2>
           <span id="exampleChip" class="chip ex" hidden>Example shoe, clear to start yours</span>
         </div>
-        <div class="keypad" id="keypad" role="group" aria-label="Add a dealt card"></div>
-        <div class="row spread">
-          <span class="label"><span id="dealtCount" class="mono">0</span> dealt · <span id="leftCount" class="mono">416</span> left</span>
+        <div class="burn">
+          <label class="label" for="burnRank">Burn card (turned face-up at the start of the shoe)</label>
+          <select id="burnRank">
+            <option value="">Not recorded</option>
+            <option>A</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option>
+            <option>8</option><option>9</option><option>10</option><option>J</option><option>Q</option><option>K</option>
+          </select>
+          <p class="note" id="burnNote"></p>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Entry mode">
+          <button class="tab" role="tab" id="tabHand" type="button" data-mode="hand" aria-controls="handMode">By hand</button>
+          <button class="tab" role="tab" id="tabCard" type="button" data-mode="card" aria-controls="cardMode">Card by card</button>
+        </div>
+
+        <div id="handMode" role="tabpanel" aria-labelledby="tabHand" class="col" style="gap:12px">
+          <div class="board">
+            <div class="side player">
+              <div class="side-head"><span>Player</span><span class="total" id="pTotal">–</span></div>
+              <div class="slots" id="pSlots"></div>
+            </div>
+            <div class="side banker">
+              <div class="side-head"><span>Banker</span><span class="total" id="bTotal">–</span></div>
+              <div class="slots" id="bSlots"></div>
+            </div>
+          </div>
+          <p class="status" id="handStatus" aria-live="polite"></p>
           <div class="row">
-            <button class="btn" id="undoBtn" type="button">Undo last</button>
-            <button class="btn" id="clearBtn" type="button">New shoe</button>
+            <button class="btn primary" id="recordBtn" type="button">Record hand</button>
+            <button class="btn" id="clearHandBtn" type="button">Clear hand</button>
           </div>
         </div>
+
+        <div class="keypad" id="keypad" role="group" aria-label="Card ranks"></div>
+        <p class="note">Keyboard: A, 2–9, 0 for 10, J, Q, K. Backspace fixes the last card. Enter records the hand.</p>
+
+        <div id="cardMode" role="tabpanel" aria-labelledby="tabCard" class="col" style="gap:12px">
+          <div class="row spread">
+            <span class="label">Every card dealt, in order</span>
+            <button class="btn" id="undoBtn" type="button">Undo last card</button>
+          </div>
+          <div class="cards" id="cardList" aria-live="polite"></div>
+        </div>
+
+        <form id="pasteForm" class="col" style="gap:8px">
+          <label class="label" for="pasteInput" id="pasteLabel">Type cards</label>
+          <textarea id="pasteInput" placeholder="9 K 4 7"></textarea>
+          <p class="err" id="pasteErr" hidden></p>
+          <div class="row"><button class="btn" type="submit" id="pasteBtn">Add cards</button></div>
+        </form>
+
+        <div class="row spread">
+          <span class="label"><span id="dealtCount" class="mono">0</span> dealt · <span id="leftCount" class="mono">416</span> left</span>
+          <button class="btn" id="clearBtn" type="button">New shoe</button>
+        </div>
         <div id="clearConfirm" class="row" hidden>
-          <span class="note">Clear all cards and results?</span>
+          <span class="note">Clear all cards, hands and results?</span>
           <button class="btn primary" id="clearYes" type="button">Clear shoe</button>
           <button class="btn" id="clearNo" type="button">Keep</button>
         </div>
-        <div class="cards" id="cardList" aria-live="polite"></div>
-        <form id="pasteForm" class="col" style="gap:8px">
-          <label class="label" for="pasteInput">Paste cards</label>
-          <textarea id="pasteInput" placeholder="K 7 4 Q 9 3 A 8 5"></textarea>
-          <p class="err" id="pasteErr" hidden></p>
-          <div class="row"><button class="btn" type="submit">Add pasted cards</button></div>
-        </form>
       </section>
 
       <section class="panel" aria-labelledby="h-road">
         <div class="row spread">
-          <h2 id="h-road">Results (bead plate)</h2>
-          <button class="btn" id="undoResult" type="button">Undo result</button>
+          <h2 id="h-road">This shoe</h2>
+          <button class="btn" id="undoResult" type="button">Undo last result</button>
         </div>
-        <div class="outcome">
-          <button class="ob b" type="button" data-r="B">Banker</button>
-          <button class="ob p" type="button" data-r="P">Player</button>
-          <button class="ob t" type="button" data-r="T">Tie</button>
+        <div id="manualResults" class="col" style="gap:8px">
+          <span class="label">Record a result without its cards</span>
+          <div class="outcome">
+            <button class="ob b" type="button" data-r="B">Banker</button>
+            <button class="ob p" type="button" data-r="P">Player</button>
+            <button class="ob t" type="button" data-r="T">Tie</button>
+          </div>
         </div>
         <div class="bead-scroll"><div class="bead" id="bead" aria-label="Bead plate"></div></div>
         <p class="note" id="streakNote"></p>
+        <ol class="hist" id="history" aria-label="Recorded hands, newest first"></ol>
       </section>
 
       <section class="panel" aria-labelledby="h-set">
@@ -240,32 +319,126 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
 (() => {
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const valueOf = r => r === 'A' ? 1 : (['10','J','Q','K'].includes(r) ? 0 : Number(r));
-  const STORE_KEY = 'shoe-odds-v1';
-  const EXAMPLE = { game: 'nc', decks: 8, csm: false, cards: ['K','7','4','Q','9','3','A','8','5','6','2','J','10','9'], results: ['B','P','B','B','T','P'], example: true };
+  const STORE_KEY = 'shoe-odds-v2';
+  const OLD_STORE_KEY = 'shoe-odds-v1';
+  const BASE = ['P1', 'B1', 'P2', 'B2'];
+  const NAMES = { B: 'Banker', P: 'Player', T: 'Tie' };
+  const ORD = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
+
+  // Every shoe is a log of events: a loose card, a result without cards, or a full hand.
+  const EXAMPLE = {
+    game: 'nc', decks: 8, csm: false, mode: 'hand', example: true, draft: {}, active: null, burn: '7',
+    events: [
+      { t: 'hand', p: ['K', '7'], b: ['4', 'Q', '9'], r: 'P' },
+      { t: 'hand', p: ['3', 'A', '6'], b: ['8', '5', '2'], r: 'B' },
+      { t: 'hand', p: ['J', '9'], b: ['10', '8'], r: 'P' },
+    ],
+  };
 
   let state = load() || structuredClone(EXAMPLE);
-  if (!state.game) state.game = 'nc';
 
   function load() {
-    try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) return JSON.parse(raw);
+      const old = localStorage.getItem(OLD_STORE_KEY);
+      if (!old) return null;
+      const o = JSON.parse(old);
+      return {
+        game: o.game || 'nc', decks: o.decks || 8, csm: !!o.csm, mode: 'hand', example: !!o.example,
+        draft: {}, active: null,
+        events: [...(o.cards || []).map(c => ({ t: 'card', c })), ...(o.results || []).map(r => ({ t: 'result', r }))],
+      };
+    } catch { return null; }
   }
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
   }
-  function markReal() { if (state.example) { state.example = false; } }
+  // The first real action on the example shoe replaces it with an empty one.
+  function startReal() {
+    if (!state.example) return;
+    state.example = false; state.events = []; state.draft = {}; state.active = null; state.burn = null;
+  }
 
-  // Rank counts left in the shoe.
-  function rankLeft() {
+  const dealtCards = () => state.events.flatMap(e => e.t === 'card' ? [e.c] : e.t === 'hand' ? [...e.p, ...e.b] : []);
+  const results = () => state.events.filter(e => e.r).map(e => e.r);
+  const draftCards = () => Object.values(state.draft).filter(Boolean);
+  // The face-up burn card is known; the face-down cards burned after it are not.
+  const burnCount = r => r === 'A' ? 1 : valueOf(r) === 0 ? 10 : Number(r);
+  const knownRemoved = () => state.burn ? [state.burn, ...dealtCards()] : dealtCards();
+  const cardsLeft = () => 52 * state.decks - knownRemoved().length - (state.burn ? burnCount(state.burn) : 0);
+
+  function rankLeft(extra = []) {
     const left = Object.fromEntries(RANKS.map(r => [r, 4 * state.decks]));
-    for (const c of state.cards) left[c]--;
+    for (const c of knownRemoved().concat(draftCards(), extra)) left[c]--;
     return left;
   }
-  // Value counts (0-9) used for the odds.
+  // Odds use the known cards removed so far; the hand being entered isn't counted until it's recorded.
+  // Face-down burned cards are unknown, and removing unknown cards leaves the odds unchanged.
   function valueCounts(ignoreDealt) {
     const c = new Array(10).fill(0);
     for (const r of RANKS) c[valueOf(r)] += 4 * state.decks;
-    if (!ignoreDealt) for (const card of state.cards) c[valueOf(card)]--;
+    if (!ignoreDealt) for (const card of knownRemoved()) c[valueOf(card)]--;
     return c;
+  }
+
+  const bankerDraws = (bt, p3) => bt <= 2 || (bt === 3 && p3 !== 8) || (bt === 4 && p3 >= 2 && p3 <= 7)
+    || (bt === 5 && p3 >= 4 && p3 <= 7) || (bt === 6 && (p3 === 6 || p3 === 7));
+
+  // Which slots this hand needs under the third-card rules, and the result once it's complete.
+  function plan(d) {
+    const v = s => valueOf(d[s]);
+    if (BASE.some(s => !d[s])) return { required: BASE, complete: false, baseDone: false };
+    const pt = (v('P1') + v('P2')) % 10, bt = (v('B1') + v('B2')) % 10;
+    const done = (required, p, b, natural = false) =>
+      ({ required, complete: true, baseDone: true, natural, pt: p, bt: b, r: p > b ? 'P' : b > p ? 'B' : 'T' });
+    if (pt >= 8 || bt >= 8) return done(BASE, pt, bt, true);
+    if (pt <= 5) {
+      if (!d.P3) return { required: [...BASE, 'P3'], complete: false, baseDone: true, b3Pending: true };
+      const p3 = v('P3'), npt = (pt + p3) % 10;
+      if (!bankerDraws(bt, p3)) return done([...BASE, 'P3'], npt, bt);
+      const req = [...BASE, 'P3', 'B3'];
+      return d.B3 ? done(req, npt, (bt + v('B3')) % 10) : { required: req, complete: false, baseDone: true };
+    }
+    if (bt <= 5) {
+      const req = [...BASE, 'B3'];
+      return d.B3 ? done(req, pt, (bt + v('B3')) % 10) : { required: req, complete: false, baseDone: true };
+    }
+    return done(BASE, pt, bt);
+  }
+  // Drop third cards that an edit made unnecessary.
+  function pruneDraft() {
+    const pl = plan(state.draft);
+    if (!pl.baseDone) return pl;
+    for (const s of ['P3', 'B3']) if (state.draft[s] && !pl.required.includes(s)) delete state.draft[s];
+    return plan(state.draft);
+  }
+  function currentSlot(pl) {
+    if (state.active && pl.required.includes(state.active)) return state.active;
+    return pl.required.find(s => !state.draft[s]) || null;
+  }
+  function fillNext(rank) {
+    const slot = currentSlot(plan(state.draft));
+    if (!slot) return false;
+    state.draft[slot] = rank; state.active = null;
+    pruneDraft();
+    return true;
+  }
+  function dealOrder(slot, pl) {
+    if (slot !== 'B3') return ORD[['P1', 'B1', 'P2', 'B2', 'P3'].indexOf(slot)];
+    return pl.required.includes('P3') ? ORD[5] : ORD[4];
+  }
+  function sideTotal(side) {
+    const vals = [1, 2, 3].map(i => state.draft[side + i]).filter(Boolean);
+    return vals.length ? vals.reduce((a, c) => a + valueOf(c), 0) % 10 : null;
+  }
+  function recordHand() {
+    const pl = plan(state.draft);
+    if (!pl.complete) return;
+    const d = state.draft;
+    state.events.push({ t: 'hand', p: [d.P1, d.P2, d.P3].filter(Boolean), b: [d.B1, d.B2, d.B3].filter(Boolean), r: pl.r });
+    state.draft = {}; state.active = null;
+    render();
   }
 
   // Exact enumeration of the next hand under standard punto banco tableau.
@@ -289,9 +462,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
       if (pt <= 5) {
         each((p3, w5) => {
           const npt = (pt + p3) % 10;
-          const draws = bt <= 2 || (bt === 3 && p3 !== 8) || (bt === 4 && p3 >= 2 && p3 <= 7)
-            || (bt === 5 && p3 >= 4 && p3 <= 7) || (bt === 6 && (p3 === 6 || p3 === 7));
-          if (draws) each((b3, w6) => settle(npt, (bt + b3) % 10, w * w5 * w6));
+          if (bankerDraws(bt, p3)) each((b3, w6) => settle(npt, (bt + b3) % 10, w * w5 * w6));
           else settle(npt, bt, w * w5);
         });
       } else if (bt <= 5) {
@@ -303,26 +474,71 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
 
   const $ = id => document.getElementById(id);
   const pct = x => (x * 100).toFixed(3) + '%';
-  const NAMES = { B: 'Banker', P: 'Player', T: 'Tie' };
+  const sideName = s => s[0] === 'P' ? 'Player' : 'Banker';
 
+  function renderMode() {
+    const hand = state.mode === 'hand';
+    $('tabHand').setAttribute('aria-selected', String(hand));
+    $('tabCard').setAttribute('aria-selected', String(!hand));
+    $('tabHand').tabIndex = hand ? 0 : -1;
+    $('tabCard').tabIndex = hand ? -1 : 0;
+    $('handMode').hidden = !hand;
+    $('cardMode').hidden = hand;
+    $('manualResults').hidden = hand;
+    $('pasteLabel').textContent = hand ? 'Type a hand in dealing order (Player, Banker, Player, Banker, then any third cards)' : 'Type cards';
+    $('pasteInput').placeholder = hand ? '9 K 4 7' : 'K 7 4 Q 9 3 A 8 5';
+    $('pasteBtn').textContent = hand ? 'Fill hand' : 'Add cards';
+  }
   function renderKeypad() {
     const left = rankLeft();
     $('keypad').innerHTML = RANKS.map(r =>
-      `<button class="key" type="button" data-rank="${r}" ${left[r] <= 0 ? 'disabled' : ''} aria-label="Add ${r}, ${left[r]} left">
+      `<button class="key" type="button" data-rank="${r}" ${left[r] <= 0 ? 'disabled' : ''} aria-label="${r}, ${left[r]} left">
         <span class="rank">${r}</span><span class="left mono">${left[r]} left</span></button>`).join('');
   }
+  function renderHand() {
+    const pl = pruneDraft();
+    const cur = currentSlot(pl);
+    const slotHtml = slot => {
+      const third = slot.endsWith('3');
+      if (third && !pl.required.includes(slot)) {
+        let msg = 'If needed';
+        if (pl.baseDone) msg = slot === 'B3' && pl.b3Pending ? 'Waits on Player' : (pl.natural ? 'Natural' : 'Stands');
+        return `<div class="slot none">${msg}</div>`;
+      }
+      const val = state.draft[slot];
+      const ord = dealOrder(slot, pl);
+      const label = `${sideName(slot)} card ${slot[1]}, dealt ${ord}${val ? ': ' + val : ', empty'}`;
+      return `<button type="button" class="slot ${val ? 'filled' : ''} ${slot === cur ? 'active' : ''}" data-slot="${slot}" aria-label="${label}" ${slot === cur ? 'aria-current="true"' : ''}>
+        <span class="val">${val || ''}</span><span class="ord">${ord}</span></button>`;
+    };
+    $('pSlots').innerHTML = ['P1', 'P2', 'P3'].map(slotHtml).join('');
+    $('bSlots').innerHTML = ['B1', 'B2', 'B3'].map(slotHtml).join('');
+    const pt = sideTotal('P'), bt = sideTotal('B');
+    $('pTotal').textContent = pt ?? '–';
+    $('bTotal').textContent = bt ?? '–';
+    const status = $('handStatus');
+    if (pl.complete) {
+      const word = pl.r === 'T' ? `<strong class="win-T">Tie</strong>, ${pl.pt} each` : `<strong class="win-${pl.r}">${NAMES[pl.r]} wins</strong>, ${pl.r === 'P' ? pl.pt + ' to ' + pl.bt : pl.bt + ' to ' + pl.pt}`;
+      const six = pl.r === 'B' && pl.bt === 6 && state.game === 'nc' ? ' Banker won with 6, so Banker bets paid half.' : '';
+      status.innerHTML = `${word}${pl.natural ? ' (natural)' : ''}.${six} Record the hand to add it.`;
+    } else if (cur) {
+      status.textContent = `Next: ${sideName(cur)}'s ${cur.endsWith('3') ? 'third' : cur[1] === '1' ? 'first' : 'second'} card (dealt ${dealOrder(cur, pl)}).`;
+    } else status.textContent = '';
+    $('recordBtn').disabled = !pl.complete;
+    $('clearHandBtn').disabled = !draftCards().length;
+  }
   function renderCards() {
-    const list = $('cardList');
-    list.innerHTML = state.cards.length
-      ? state.cards.map(c => `<span class="card ${valueOf(c) === 0 ? 'zero' : ''}">${c}</span>`).join('')
+    const cards = dealtCards();
+    $('cardList').innerHTML = cards.length
+      ? cards.map(c => `<span class="card ${valueOf(c) === 0 ? 'zero' : ''}">${c}</span>`).join('')
       : '<span class="empty">No cards yet. Tap a rank above as each card is dealt.</span>';
-    const total = 52 * state.decks;
-    $('dealtCount').textContent = state.cards.length;
-    $('leftCount').textContent = total - state.cards.length;
+    $('dealtCount').textContent = cards.length;
+    $('leftCount').textContent = cardsLeft();
     $('exampleChip').hidden = !state.example;
+    $('undoBtn').disabled = !state.events.some(e => e.t === 'card');
   }
   function renderBead() {
-    const res = state.results;
+    const res = results();
     const cols = Math.max(12, Math.ceil(res.length / 6) + 1);
     let html = '';
     for (let i = 0; i < cols * 6; i++) {
@@ -331,17 +547,25 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     }
     $('bead').innerHTML = html;
     const decided = res.filter(r => r !== 'T');
-    let note = 'Record each hand result to track the shoe.';
+    let note = 'Recorded hands and results appear here.';
     if (decided.length) {
       const last = decided[decided.length - 1];
       let k = 0; for (let i = decided.length - 1; i >= 0 && decided[i] === last; i--) k++;
-      const b = res.filter(r => r === 'B').length, p = res.filter(r => r === 'P').length, t = res.filter(r => r === 'T').length;
-      note = `Current streak: ${NAMES[last]} ×${k}. This shoe: Banker ${b}, Player ${p}, Tie ${t}. The streak has no effect on the next hand.`;
+      const count = x => res.filter(r => r === x).length;
+      note = `Current streak: ${NAMES[last]} ×${k}. This shoe: Banker ${count('B')}, Player ${count('P')}, Tie ${count('T')}. The streak has no effect on the next hand.`;
     }
     $('streakNote').textContent = note;
+    $('undoResult').disabled = !state.events.some(e => e.r);
+
+    const hands = state.events.map((e, i) => ({ e, n: state.events.slice(0, i + 1).filter(x => x.r).length })).filter(x => x.e.t === 'hand');
+    const tot = cs => cs.reduce((a, c) => a + valueOf(c), 0) % 10;
+    $('history').innerHTML = hands.slice(-12).reverse().map(({ e, n }) =>
+      `<li><span class="num">#${n}</span>
+        <span class="hands"><span class="p">Player ${e.p.join(' ')} = ${tot(e.p)}</span><span class="b">Banker ${e.b.join(' ')} = ${tot(e.b)}</span></span>
+        <span class="dot ${e.r}" title="${NAMES[e.r]}">${e.r}</span></li>`).join('');
   }
   function renderOdds() {
-    const left = 52 * state.decks - state.cards.length;
+    const left = cardsLeft();
     if (!state.csm && left < 6) {
       $('calcNote').textContent = 'Fewer than 6 cards left. Start a new shoe.';
       return;
@@ -369,62 +593,130 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     else { chip.className = 'chip warn'; chip.textContent = 'Every bet loses on average'; }
     $('calcNote').textContent = state.csm
       ? 'Reshuffle mode: odds are for a full shoe, so past cards are ignored.'
-      : `Exact odds from the ${left} cards left. Ties return Banker and Player bets.`;
-    $('b6Note').textContent = noCommission
-      ? `Chance Banker wins with 6 (pays half): ${pct(o.B6)}.`
-      : '';
+      : `Exact odds from the ${left} cards left${state.burn ? ' (face-down burned cards count as unknown)' : ''}${draftCards().length ? ', not counting the hand being entered' : ''}. Ties return Banker and Player bets.`;
+    $('b6Note').textContent = noCommission ? `Chance Banker wins with 6 (pays half): ${pct(o.B6)}.` : '';
+  }
+  function renderBurn() {
+    $('burnRank').value = state.burn || '';
+    $('burnNote').textContent = state.burn
+      ? `${state.burn} face-up, then ${burnCount(state.burn)} card${burnCount(state.burn) === 1 ? '' : 's'} burned face-down. Only the face-up card changes the odds.`
+      : 'Pick the face-up card when the dealer starts a new shoe.';
   }
   function render() {
     $('game').value = state.game;
     $('decks').value = String(state.decks);
     $('csm').checked = state.csm;
-    renderKeypad(); renderCards(); renderBead(); renderOdds();
+    renderBurn(); renderMode(); renderHand(); renderKeypad(); renderCards(); renderBead(); renderOdds();
     save();
   }
 
+  function addRank(rank) {
+    if (rankLeft()[rank] <= 0) return;
+    startReal();
+    if (state.mode === 'hand') { if (!fillNext(rank)) return; }
+    else state.events.push({ t: 'card', c: rank });
+    render();
+  }
+  function backspace() {
+    startReal();
+    if (state.mode === 'hand') {
+      const pl = plan(state.draft);
+      const target = state.active && state.draft[state.active] ? state.active
+        : [...pl.required].reverse().find(s => state.draft[s]);
+      if (target) { delete state.draft[target]; state.active = target; pruneDraft(); }
+    } else {
+      const i = state.events.map(e => e.t).lastIndexOf('card');
+      if (i >= 0) state.events.splice(i, 1);
+    }
+    render();
+  }
+
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const t = e.target.closest('[data-mode]'); if (!t) return;
+    state.mode = t.dataset.mode; render();
+  });
+  document.querySelector('.tabs').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    state.mode = state.mode === 'hand' ? 'card' : 'hand'; render();
+    $(state.mode === 'hand' ? 'tabHand' : 'tabCard').focus();
+  });
   $('keypad').addEventListener('click', e => {
     const k = e.target.closest('[data-rank]'); if (!k || k.disabled) return;
-    if (state.example) { state.cards = []; state.results = []; markReal(); }
-    state.cards.push(k.dataset.rank); render();
+    addRank(k.dataset.rank);
   });
-  $('undoBtn').addEventListener('click', () => { markReal(); state.cards.pop(); render(); });
+  document.querySelector('.board').addEventListener('click', e => {
+    const s = e.target.closest('[data-slot]'); if (!s) return;
+    state.active = s.dataset.slot; render();
+  });
+  $('recordBtn').addEventListener('click', recordHand);
+  $('clearHandBtn').addEventListener('click', () => { state.draft = {}; state.active = null; render(); });
+  $('undoBtn').addEventListener('click', backspace);
   $('clearBtn').addEventListener('click', () => { $('clearConfirm').hidden = false; });
   $('clearNo').addEventListener('click', () => { $('clearConfirm').hidden = true; });
   $('clearYes').addEventListener('click', () => {
-    state = { game: state.game, decks: state.decks, csm: state.csm, cards: [], results: [], example: false };
+    state = { game: state.game, decks: state.decks, csm: state.csm, mode: state.mode, example: false, draft: {}, active: null, burn: null, events: [] };
     $('clearConfirm').hidden = true; render();
+    $('burnRank').focus();
   });
   $('pasteForm').addEventListener('submit', e => {
     e.preventDefault();
     const err = $('pasteErr');
+    const fail = msg => { err.textContent = msg; err.hidden = false; };
     const tokens = $('pasteInput').value.toUpperCase().split(/[\s,|;\/]+/).filter(Boolean)
       .map(t => t === '1' ? 'A' : t === 'T' || t === '0' ? '10' : t);
     const bad = tokens.filter(t => !RANKS.includes(t));
-    if (!tokens.length) { err.textContent = 'Type some cards first, for example: K 7 4 Q 9.'; err.hidden = false; return; }
-    if (bad.length) { err.textContent = `These aren't card ranks: ${bad.join(', ')}. Use A, 2–9, 10, J, Q or K.`; err.hidden = false; return; }
-    const base = state.example ? [] : state.cards.slice();
-    const left = Object.fromEntries(RANKS.map(r => [r, 4 * state.decks]));
-    for (const c of base.concat(tokens)) left[c]--;
-    const over = RANKS.filter(r => left[r] < 0);
-    if (over.length) { err.textContent = `Too many ${over.join(', ')} for a ${state.decks}-deck shoe. Check the list.`; err.hidden = false; return; }
-    err.hidden = true;
-    if (state.example) { state.results = []; markReal(); }
-    state.cards = base.concat(tokens); $('pasteInput').value = ''; render();
+    if (!tokens.length) return fail('Type some cards first, for example: 9 K 4 7.');
+    if (bad.length) return fail(`These aren't card ranks: ${bad.join(', ')}. Use A, 2–9, 10, J, Q or K.`);
+    startReal();
+    const over = Object.entries(rankLeft(tokens)).filter(([, n]) => n < 0).map(([r]) => r);
+    if (over.length) return fail(`Too many ${over.join(', ')} for a ${state.decks}-deck shoe. Check the list.`);
+    if (state.mode === 'hand') {
+      const before = { ...state.draft };
+      for (const t of tokens) {
+        if (!fillNext(t)) { state.draft = before; return fail('That is more cards than this hand needs. The third-card rules decide whether a third card is dealt.'); }
+      }
+    } else {
+      state.events.push(...tokens.map(c => ({ t: 'card', c })));
+    }
+    err.hidden = true; $('pasteInput').value = ''; render();
   });
   document.querySelector('.outcome').addEventListener('click', e => {
     const b = e.target.closest('[data-r]'); if (!b) return;
-    if (state.example) { state.cards = []; state.results = []; markReal(); }
-    state.results.push(b.dataset.r); render();
+    startReal(); state.events.push({ t: 'result', r: b.dataset.r }); render();
   });
-  $('undoResult').addEventListener('click', () => { markReal(); state.results.pop(); render(); });
+  $('undoResult').addEventListener('click', () => {
+    startReal();
+    const i = state.events.map(e => !!e.r).lastIndexOf(true);
+    if (i >= 0) state.events.splice(i, 1);
+    render();
+  });
   $('decks').addEventListener('change', e => {
     const d = Number(e.target.value);
-    const counts = {}; for (const c of state.cards) counts[c] = (counts[c] || 0) + 1;
+    const counts = {}; for (const c of knownRemoved().concat(draftCards())) counts[c] = (counts[c] || 0) + 1;
     if (Object.values(counts).some(n => n > 4 * d)) { e.target.value = String(state.decks); $('calcNote').textContent = `Too many cards of one rank for ${d} decks. Undo some cards first.`; return; }
     state.decks = d; render();
   });
+  $('burnRank').addEventListener('change', e => {
+    const r = e.target.value || null;
+    startReal();
+    const left = rankLeft();
+    if (state.burn) left[state.burn]++;
+    if (r && left[r] <= 0) { e.target.value = state.burn || ''; $('burnNote').textContent = `No ${r} left in the shoe. Check the cards entered.`; return; }
+    state.burn = r; render();
+  });
   $('game').addEventListener('change', e => { state.game = e.target.value; render(); });
   $('csm').addEventListener('change', e => { state.csm = e.target.checked; render(); });
+
+  const KEYMAP = { A: 'A', 1: 'A', 0: '10', T: '10', J: 'J', Q: 'Q', K: 'K' };
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('textarea, input, select')) return;
+    const k = e.key.toUpperCase();
+    const rank = KEYMAP[k] || (/^[2-9]$/.test(k) ? k : null);
+    if (rank) { e.preventDefault(); addRank(rank); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); backspace(); return; }
+    if (e.key === 'Enter' && state.mode === 'hand' && !e.target.closest('button')) { e.preventDefault(); recordHand(); }
+  });
 
   render();
 })();
