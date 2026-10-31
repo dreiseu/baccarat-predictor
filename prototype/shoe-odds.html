@@ -1,0 +1,410 @@
+<title>Shoe Odds Calculator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two-column table-side tool — shoe input on the left, live odds slip pinned on the right; stacks odds-first on phones. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #18221d;
+  --muted: #5b6a62;
+  --line: #d7ddd8;
+  --felt: #1f5a46;
+  --felt-soft: #e2eee8;
+  --banker: #c0392b;
+  --banker-soft: #f8e3e0;
+  --player: #2155b8;
+  --player-soft: #e1e9f8;
+  --tie: #2f8a4c;
+  --tie-soft: #e0f1e5;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101613; --surface: #17201b; --ink: #e6ece8; --muted: #9aaba2; --line: #2b3832;
+    --felt: #5fbf98; --felt-soft: #1c3229;
+    --banker: #f0796b; --banker-soft: #3a1f1c; --player: #7fa6f0; --player-soft: #1c2740;
+    --tie: #6fcf8d; --tie-soft: #1a3323; --warn: #e6b65c; --warn-soft: #3a2f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101613; --surface: #17201b; --ink: #e6ece8; --muted: #9aaba2; --line: #2b3832;
+  --felt: #5fbf98; --felt-soft: #1c3229;
+  --banker: #f0796b; --banker-soft: #3a1f1c; --player: #7fa6f0; --player-soft: #1c2740;
+  --tie: #6fcf8d; --tie-soft: #1a3323; --warn: #e6b65c; --warn-soft: #3a2f17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+}
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+header { display: flex; flex-direction: column; gap: 6px; }
+h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 36px); line-height: 1.1; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 68ch; }
+h2 { font-family: var(--font-display); font-size: 18px; margin: 0; }
+.label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } .slip { order: -1; } }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+section.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.spread { justify-content: space-between; }
+
+button, select, textarea, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--felt); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--felt); border-color: var(--felt); color: var(--surface); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.keypad { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 480px) { .keypad { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.key {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+  padding: 10px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.key:hover:not(:disabled) { border-color: var(--felt); background: var(--felt-soft); }
+.key:disabled { opacity: .4; cursor: not-allowed; }
+.key .rank { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; }
+.key .left { font-size: 11px; color: var(--muted); }
+
+.cards { display: flex; flex-wrap: wrap; gap: 6px; min-height: 34px; }
+.card {
+  font-family: var(--font-mono); font-weight: 500; font-size: 14px;
+  min-width: 30px; padding: 4px 6px; text-align: center;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
+}
+.card.zero { color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; }
+textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: var(--font-mono); font-size: 14px; }
+.err { color: var(--banker); font-size: 13px; margin: 0; }
+
+.outcome { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ob { border-radius: 8px; border: 1px solid transparent; padding: 9px 6px; font-weight: 600; }
+.ob.b { background: var(--banker-soft); color: var(--banker); border-color: var(--banker); }
+.ob.p { background: var(--player-soft); color: var(--player); border-color: var(--player); }
+.ob.t { background: var(--tie-soft); color: var(--tie); border-color: var(--tie); }
+
+.bead-scroll { overflow-x: auto; padding-bottom: 4px; }
+.bead { display: grid; grid-auto-flow: column; grid-template-rows: repeat(6, 26px); grid-auto-columns: 26px; gap: 3px; width: max-content; }
+.bead .cell { border: 1px solid var(--line); border-radius: 4px; }
+.dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--surface); }
+.dot.B { background: var(--banker); } .dot.P { background: var(--player); } .dot.T { background: var(--tie); }
+
+.slip { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 860px) { .slip { position: static; } }
+.pick { border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 4px; background: var(--felt-soft); }
+.pick .who { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; }
+.pick .who.B { color: var(--banker); } .pick .who.P { color: var(--player); }
+.bars { display: flex; flex-direction: column; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 72px; gap: 10px; align-items: center; }
+.track { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.fill { height: 100%; border-radius: 999px; transition: width .25s ease; }
+.fill.B { background: var(--banker); } .fill.P { background: var(--player); } .fill.T { background: var(--tie); }
+.pct { text-align: right; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 0; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.neg { color: var(--banker); } .pos { color: var(--tie); font-weight: 600; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--tie-soft); color: var(--tie); }
+.chip.ex { background: var(--warn-soft); color: var(--warn); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.check input { margin-top: 4px; }
+.facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+@media (prefers-reduced-motion: reduce) { .fill { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Shoe Odds Calculator</h1>
+    <p class="lede">Enter every card dealt from the current shoe. The calculator works out the exact Banker, Player and Tie odds for the next hand from the cards left in the shoe.</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-cards">
+        <div class="row spread">
+          <h2 id="h-cards">Cards dealt</h2>
+          <span id="exampleChip" class="chip ex" hidden>Example shoe, clear to start yours</span>
+        </div>
+        <div class="keypad" id="keypad" role="group" aria-label="Add a dealt card"></div>
+        <div class="row spread">
+          <span class="label"><span id="dealtCount" class="mono">0</span> dealt · <span id="leftCount" class="mono">416</span> left</span>
+          <div class="row">
+            <button class="btn" id="undoBtn" type="button">Undo last</button>
+            <button class="btn" id="clearBtn" type="button">New shoe</button>
+          </div>
+        </div>
+        <div id="clearConfirm" class="row" hidden>
+          <span class="note">Clear all cards and results?</span>
+          <button class="btn primary" id="clearYes" type="button">Clear shoe</button>
+          <button class="btn" id="clearNo" type="button">Keep</button>
+        </div>
+        <div class="cards" id="cardList" aria-live="polite"></div>
+        <form id="pasteForm" class="col" style="gap:8px">
+          <label class="label" for="pasteInput">Paste cards</label>
+          <textarea id="pasteInput" placeholder="K 7 4 Q 9 3 A 8 5"></textarea>
+          <p class="err" id="pasteErr" hidden></p>
+          <div class="row"><button class="btn" type="submit">Add pasted cards</button></div>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="h-road">
+        <div class="row spread">
+          <h2 id="h-road">Results (bead plate)</h2>
+          <button class="btn" id="undoResult" type="button">Undo result</button>
+        </div>
+        <div class="outcome">
+          <button class="ob b" type="button" data-r="B">Banker</button>
+          <button class="ob p" type="button" data-r="P">Player</button>
+          <button class="ob t" type="button" data-r="T">Tie</button>
+        </div>
+        <div class="bead-scroll"><div class="bead" id="bead" aria-label="Bead plate"></div></div>
+        <p class="note" id="streakNote"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-set">
+        <h2 id="h-set">Table settings</h2>
+        <div class="settings">
+          <div class="field">
+            <label class="label" for="decks">Decks in shoe</label>
+            <select id="decks"><option value="8">8 decks</option><option value="6">6 decks</option></select>
+          </div>
+          <label class="check" for="csm"><input type="checkbox" id="csm"> <span>Table reshuffles after every hand (continuous shuffler or RNG). Past cards are ignored.</span></label>
+        </div>
+      </section>
+    </div>
+
+    <aside class="slip col" aria-labelledby="h-odds">
+      <section class="panel">
+        <h2 id="h-odds">Next hand</h2>
+        <div class="pick">
+          <span class="label">Best bet</span>
+          <span class="who" id="pickWho">Banker</span>
+          <span id="pickChip" class="chip warn" style="align-self:flex-start">Every bet loses on average</span>
+        </div>
+        <div class="bars" id="bars"></div>
+        <table>
+          <thead><tr><th>Bet</th><th class="num">Pays</th><th class="num">Expected per 100</th></tr></thead>
+          <tbody id="evBody"></tbody>
+        </table>
+        <p class="note" id="calcNote"></p>
+      </section>
+      <section class="panel">
+        <h2>How to read this</h2>
+        <ul class="facts">
+          <li>The best bet is the one that loses the least on average. It still loses about 49% of the time.</li>
+          <li>Streaks and road patterns don't change the odds. In a 3.2 million hand simulation, Banker won about 50.7% of decided hands after every pattern tested.</li>
+          <li>Only the cards left in the shoe move the numbers, and usually by a fraction of a percent.</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const valueOf = r => r === 'A' ? 1 : (['10','J','Q','K'].includes(r) ? 0 : Number(r));
+  const STORE_KEY = 'shoe-odds-v1';
+  const EXAMPLE = { decks: 8, csm: false, cards: ['K','7','4','Q','9','3','A','8','5','6','2','J','10','9'], results: ['B','P','B','B','T','P'], example: true };
+
+  let state = load() || structuredClone(EXAMPLE);
+
+  function load() {
+    try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
+  }
+  function markReal() { if (state.example) { state.example = false; } }
+
+  // Rank counts left in the shoe.
+  function rankLeft() {
+    const left = Object.fromEntries(RANKS.map(r => [r, 4 * state.decks]));
+    for (const c of state.cards) left[c]--;
+    return left;
+  }
+  // Value counts (0-9) used for the odds.
+  function valueCounts(ignoreDealt) {
+    const c = new Array(10).fill(0);
+    for (const r of RANKS) c[valueOf(r)] += 4 * state.decks;
+    if (!ignoreDealt) for (const card of state.cards) c[valueOf(card)]--;
+    return c;
+  }
+
+  // Exact enumeration of the next hand under standard punto banco tableau.
+  function exactOdds(c) {
+    let n = c.reduce((a, b) => a + b, 0);
+    let B = 0, P = 0, T = 0;
+    const settle = (pt, bt, w) => { if (pt > bt) P += w; else if (bt > pt) B += w; else T += w; };
+    const each = cb => {
+      for (let v = 0; v < 10; v++) {
+        if (c[v] > 0) { const w = c[v] / n; c[v]--; n--; cb(v, w); c[v]++; n++; }
+      }
+    };
+    each((p1, w1) => each((b1, w2) => each((p2, w3) => each((b2, w4) => {
+      const w = w1 * w2 * w3 * w4;
+      const pt = (p1 + p2) % 10, bt = (b1 + b2) % 10;
+      if (pt >= 8 || bt >= 8) return settle(pt, bt, w);
+      if (pt <= 5) {
+        each((p3, w5) => {
+          const npt = (pt + p3) % 10;
+          const draws = bt <= 2 || (bt === 3 && p3 !== 8) || (bt === 4 && p3 >= 2 && p3 <= 7)
+            || (bt === 5 && p3 >= 4 && p3 <= 7) || (bt === 6 && (p3 === 6 || p3 === 7));
+          if (draws) each((b3, w6) => settle(npt, (bt + b3) % 10, w * w5 * w6));
+          else settle(npt, bt, w * w5);
+        });
+      } else if (bt <= 5) {
+        each((b3, w6) => settle(pt, (bt + b3) % 10, w * w6));
+      } else settle(pt, bt, w);
+    }))));
+    return { B, P, T };
+  }
+
+  const $ = id => document.getElementById(id);
+  const pct = x => (x * 100).toFixed(3) + '%';
+  const NAMES = { B: 'Banker', P: 'Player', T: 'Tie' };
+
+  function renderKeypad() {
+    const left = rankLeft();
+    $('keypad').innerHTML = RANKS.map(r =>
+      `<button class="key" type="button" data-rank="${r}" ${left[r] <= 0 ? 'disabled' : ''} aria-label="Add ${r}, ${left[r]} left">
+        <span class="rank">${r}</span><span class="left mono">${left[r]} left</span></button>`).join('');
+  }
+  function renderCards() {
+    const list = $('cardList');
+    list.innerHTML = state.cards.length
+      ? state.cards.map(c => `<span class="card ${valueOf(c) === 0 ? 'zero' : ''}">${c}</span>`).join('')
+      : '<span class="empty">No cards yet. Tap a rank above as each card is dealt.</span>';
+    const total = 52 * state.decks;
+    $('dealtCount').textContent = state.cards.length;
+    $('leftCount').textContent = total - state.cards.length;
+    $('exampleChip').hidden = !state.example;
+  }
+  function renderBead() {
+    const res = state.results;
+    const cols = Math.max(12, Math.ceil(res.length / 6) + 1);
+    let html = '';
+    for (let i = 0; i < cols * 6; i++) {
+      const r = res[i];
+      html += r ? `<div class="dot ${r}" title="${NAMES[r]}">${r}</div>` : '<div class="cell"></div>';
+    }
+    $('bead').innerHTML = html;
+    const decided = res.filter(r => r !== 'T');
+    let note = 'Record each hand result to track the shoe.';
+    if (decided.length) {
+      const last = decided[decided.length - 1];
+      let k = 0; for (let i = decided.length - 1; i >= 0 && decided[i] === last; i--) k++;
+      const b = res.filter(r => r === 'B').length, p = res.filter(r => r === 'P').length, t = res.filter(r => r === 'T').length;
+      note = `Current streak: ${NAMES[last]} ×${k}. This shoe: Banker ${b}, Player ${p}, Tie ${t}. The streak has no effect on the next hand.`;
+    }
+    $('streakNote').textContent = note;
+  }
+  function renderOdds() {
+    const left = 52 * state.decks - state.cards.length;
+    if (!state.csm && left < 6) {
+      $('calcNote').textContent = 'Fewer than 6 cards left. Start a new shoe.';
+      return;
+    }
+    const o = exactOdds(valueCounts(state.csm));
+    $('bars').innerHTML = ['B', 'P', 'T'].map(k =>
+      `<div class="bar-row"><span>${NAMES[k]}</span>
+        <div class="track" role="img" aria-label="${NAMES[k]} ${pct(o[k])}"><div class="fill ${k}" style="width:${(o[k] * 100).toFixed(2)}%"></div></div>
+        <span class="pct mono">${pct(o[k])}</span></div>`).join('');
+    // Ties push on Banker and Player bets.
+    const ev = { B: o.B * 0.95 - o.P, P: o.P - o.B, T: o.T * 8 - (1 - o.T) };
+    const pays = { B: '0.95 to 1', P: '1 to 1', T: '8 to 1' };
+    $('evBody').innerHTML = ['B', 'P', 'T'].map(k => {
+      const v = ev[k] * 100;
+      return `<tr><td>${NAMES[k]}</td><td class="num">${pays[k]}</td><td class="num ${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td></tr>`;
+    }).join('');
+    const best = ['B', 'P', 'T'].reduce((a, b) => ev[b] > ev[a] ? b : a);
+    const who = $('pickWho');
+    who.textContent = NAMES[best]; who.className = 'who ' + best;
+    const chip = $('pickChip');
+    if (ev[best] > 0) { chip.className = 'chip ok'; chip.textContent = `Small edge: +${(ev[best] * 100).toFixed(2)} per 100`; }
+    else { chip.className = 'chip warn'; chip.textContent = 'Every bet loses on average'; }
+    $('calcNote').textContent = state.csm
+      ? 'Reshuffle mode: odds are for a full shoe, so past cards are ignored.'
+      : `Exact odds from the ${left} cards left. Ties return Banker and Player bets.`;
+  }
+  function render() {
+    $('decks').value = String(state.decks);
+    $('csm').checked = state.csm;
+    renderKeypad(); renderCards(); renderBead(); renderOdds();
+    save();
+  }
+
+  $('keypad').addEventListener('click', e => {
+    const k = e.target.closest('[data-rank]'); if (!k || k.disabled) return;
+    if (state.example) { state.cards = []; state.results = []; markReal(); }
+    state.cards.push(k.dataset.rank); render();
+  });
+  $('undoBtn').addEventListener('click', () => { markReal(); state.cards.pop(); render(); });
+  $('clearBtn').addEventListener('click', () => { $('clearConfirm').hidden = false; });
+  $('clearNo').addEventListener('click', () => { $('clearConfirm').hidden = true; });
+  $('clearYes').addEventListener('click', () => {
+    state = { decks: state.decks, csm: state.csm, cards: [], results: [], example: false };
+    $('clearConfirm').hidden = true; render();
+  });
+  $('pasteForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const err = $('pasteErr');
+    const tokens = $('pasteInput').value.toUpperCase().split(/[\s,|;\/]+/).filter(Boolean)
+      .map(t => t === '1' ? 'A' : t === 'T' || t === '0' ? '10' : t);
+    const bad = tokens.filter(t => !RANKS.includes(t));
+    if (!tokens.length) { err.textContent = 'Type some cards first, for example: K 7 4 Q 9.'; err.hidden = false; return; }
+    if (bad.length) { err.textContent = `These aren't card ranks: ${bad.join(', ')}. Use A, 2–9, 10, J, Q or K.`; err.hidden = false; return; }
+    const base = state.example ? [] : state.cards.slice();
+    const left = Object.fromEntries(RANKS.map(r => [r, 4 * state.decks]));
+    for (const c of base.concat(tokens)) left[c]--;
+    const over = RANKS.filter(r => left[r] < 0);
+    if (over.length) { err.textContent = `Too many ${over.join(', ')} for a ${state.decks}-deck shoe. Check the list.`; err.hidden = false; return; }
+    err.hidden = true;
+    if (state.example) { state.results = []; markReal(); }
+    state.cards = base.concat(tokens); $('pasteInput').value = ''; render();
+  });
+  document.querySelector('.outcome').addEventListener('click', e => {
+    const b = e.target.closest('[data-r]'); if (!b) return;
+    if (state.example) { state.cards = []; state.results = []; markReal(); }
+    state.results.push(b.dataset.r); render();
+  });
+  $('undoResult').addEventListener('click', () => { markReal(); state.results.pop(); render(); });
+  $('decks').addEventListener('change', e => {
+    const d = Number(e.target.value);
+    const counts = {}; for (const c of state.cards) counts[c] = (counts[c] || 0) + 1;
+    if (Object.values(counts).some(n => n > 4 * d)) { e.target.value = String(state.decks); $('calcNote').textContent = `Too many cards of one rank for ${d} decks. Undo some cards first.`; return; }
+    state.decks = d; render();
+  });
+  $('csm').addEventListener('change', e => { state.csm = e.target.checked; render(); });
+
+  render();
+})();
+</script>
