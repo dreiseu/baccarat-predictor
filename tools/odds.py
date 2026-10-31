@@ -1,5 +1,5 @@
 """Exact next-hand odds given cards already dealt from an 8-deck shoe.
-Usage: python3 odds.py "A 5 K 9 3 Q ..."   (ranks: A 2-9 10 J Q K; 10/J/Q/K all count 0)"""
+Usage: python3 odds.py [--no-commission] "A 5 K 9 3 Q ..."   (ranks: A 2-9 10 J Q K; 10/J/Q/K all count 0)"""
 import sys
 from functools import lru_cache
 DECKS = 8
@@ -13,7 +13,7 @@ def odds(dealt):
     for c in dealt:
         v = rank_val(c); counts[v] -= 1
         if counts[v] < 0: raise SystemExit(f"Too many cards of value {v}")
-    res = {'B': 0.0, 'P': 0.0, 'T': 0.0}
+    res = {'B': 0.0, 'P': 0.0, 'T': 0.0, 'B6': 0.0}
     def draws(cnt):
         n = sum(cnt)
         for v in range(10):
@@ -23,6 +23,7 @@ def odds(dealt):
                 cnt[v] += 1
     def settle(pt, bt, w):
         res['P' if pt > bt else 'B' if bt > pt else 'T'] += w
+        if bt > pt and bt == 6: res['B6'] += w
     cnt = counts[:]
     for p1, w1 in draws(cnt):
         for b1, w2 in draws(cnt):
@@ -44,9 +45,14 @@ def odds(dealt):
                     else: settle(pt, bt, w)
     return res
 if __name__ == '__main__':
-    dealt = sys.argv[1].replace(',', ' ').split() if len(sys.argv) > 1 else []
+    args = sys.argv[1:]
+    no_commission = '--no-commission' in args
+    args = [a for a in args if a != '--no-commission']
+    dealt = args[0].replace(',', ' ').split() if args else []
     r = odds(dealt)
-    evB = r['B'] * 0.95 - r['P']; evP = r['P'] - r['B']; evT = r['T'] * 8 - (1 - r['T'])
+    # No Commission: Banker pays 1:1, except a Banker win on 6 pays 1:2.
+    evB = (r['B'] - r['B6']) + r['B6'] * 0.5 - r['P'] if no_commission else r['B'] * 0.95 - r['P']; evP = r['P'] - r['B']; evT = r['T'] * 8 - (1 - r['T'])
     print(f"Cards removed: {len(dealt)}")
     print(f"Banker {r['B']*100:.3f}%  Player {r['P']*100:.3f}%  Tie {r['T']*100:.3f}%")
+    if no_commission: print(f"Banker wins with 6: {r['B6']*100:.3f}%")
     print(f"EV per 1 unit -> Banker {evB:+.4f}  Player {evP:+.4f}  Tie(8:1) {evT:+.4f}")

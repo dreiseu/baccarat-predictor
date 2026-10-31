@@ -193,6 +193,13 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
         <h2 id="h-set">Table settings</h2>
         <div class="settings">
           <div class="field">
+            <label class="label" for="game">Game</label>
+            <select id="game">
+              <option value="nc">No Commission (Banker 6 pays half)</option>
+              <option value="std">Standard (Banker pays 0.95)</option>
+            </select>
+          </div>
+          <div class="field">
             <label class="label" for="decks">Decks in shoe</label>
             <select id="decks"><option value="8">8 decks</option><option value="6">6 decks</option></select>
           </div>
@@ -215,6 +222,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
           <tbody id="evBody"></tbody>
         </table>
         <p class="note" id="calcNote"></p>
+        <p class="note" id="b6Note"></p>
       </section>
       <section class="panel">
         <h2>How to read this</h2>
@@ -233,9 +241,10 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
   const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
   const valueOf = r => r === 'A' ? 1 : (['10','J','Q','K'].includes(r) ? 0 : Number(r));
   const STORE_KEY = 'shoe-odds-v1';
-  const EXAMPLE = { decks: 8, csm: false, cards: ['K','7','4','Q','9','3','A','8','5','6','2','J','10','9'], results: ['B','P','B','B','T','P'], example: true };
+  const EXAMPLE = { game: 'nc', decks: 8, csm: false, cards: ['K','7','4','Q','9','3','A','8','5','6','2','J','10','9'], results: ['B','P','B','B','T','P'], example: true };
 
   let state = load() || structuredClone(EXAMPLE);
+  if (!state.game) state.game = 'nc';
 
   function load() {
     try { const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
@@ -262,8 +271,12 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
   // Exact enumeration of the next hand under standard punto banco tableau.
   function exactOdds(c) {
     let n = c.reduce((a, b) => a + b, 0);
-    let B = 0, P = 0, T = 0;
-    const settle = (pt, bt, w) => { if (pt > bt) P += w; else if (bt > pt) B += w; else T += w; };
+    let B = 0, P = 0, T = 0, B6 = 0;
+    const settle = (pt, bt, w) => {
+      if (pt > bt) P += w;
+      else if (bt > pt) { B += w; if (bt === 6) B6 += w; }
+      else T += w;
+    };
     const each = cb => {
       for (let v = 0; v < 10; v++) {
         if (c[v] > 0) { const w = c[v] / n; c[v]--; n--; cb(v, w); c[v]++; n++; }
@@ -285,7 +298,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
         each((b3, w6) => settle(pt, (bt + b3) % 10, w * w6));
       } else settle(pt, bt, w);
     }))));
-    return { B, P, T };
+    return { B, P, T, B6 };
   }
 
   const $ = id => document.getElementById(id);
@@ -339,8 +352,11 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
         <div class="track" role="img" aria-label="${NAMES[k]} ${pct(o[k])}"><div class="fill ${k}" style="width:${(o[k] * 100).toFixed(2)}%"></div></div>
         <span class="pct mono">${pct(o[k])}</span></div>`).join('');
     // Ties push on Banker and Player bets.
-    const ev = { B: o.B * 0.95 - o.P, P: o.P - o.B, T: o.T * 8 - (1 - o.T) };
-    const pays = { B: '0.95 to 1', P: '1 to 1', T: '8 to 1' };
+    const noCommission = state.game === 'nc';
+    // No Commission: Banker pays 1 to 1, except a Banker win on 6 pays 1 to 2.
+    const evBanker = noCommission ? (o.B - o.B6) + o.B6 * 0.5 - o.P : o.B * 0.95 - o.P;
+    const ev = { B: evBanker, P: o.P - o.B, T: o.T * 8 - (1 - o.T) };
+    const pays = { B: noCommission ? '1 to 1 (6 pays ½)' : '0.95 to 1', P: '1 to 1', T: '8 to 1' };
     $('evBody').innerHTML = ['B', 'P', 'T'].map(k => {
       const v = ev[k] * 100;
       return `<tr><td>${NAMES[k]}</td><td class="num">${pays[k]}</td><td class="num ${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td></tr>`;
@@ -354,8 +370,12 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     $('calcNote').textContent = state.csm
       ? 'Reshuffle mode: odds are for a full shoe, so past cards are ignored.'
       : `Exact odds from the ${left} cards left. Ties return Banker and Player bets.`;
+    $('b6Note').textContent = noCommission
+      ? `Chance Banker wins with 6 (pays half): ${pct(o.B6)}.`
+      : '';
   }
   function render() {
+    $('game').value = state.game;
     $('decks').value = String(state.decks);
     $('csm').checked = state.csm;
     renderKeypad(); renderCards(); renderBead(); renderOdds();
@@ -371,7 +391,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
   $('clearBtn').addEventListener('click', () => { $('clearConfirm').hidden = false; });
   $('clearNo').addEventListener('click', () => { $('clearConfirm').hidden = true; });
   $('clearYes').addEventListener('click', () => {
-    state = { decks: state.decks, csm: state.csm, cards: [], results: [], example: false };
+    state = { game: state.game, decks: state.decks, csm: state.csm, cards: [], results: [], example: false };
     $('clearConfirm').hidden = true; render();
   });
   $('pasteForm').addEventListener('submit', e => {
@@ -403,6 +423,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     if (Object.values(counts).some(n => n > 4 * d)) { e.target.value = String(state.decks); $('calcNote').textContent = `Too many cards of one rank for ${d} decks. Undo some cards first.`; return; }
     state.decks = d; render();
   });
+  $('game').addEventListener('change', e => { state.game = e.target.value; render(); });
   $('csm').addEventListener('change', e => { state.csm = e.target.checked; render(); });
 
   render();
