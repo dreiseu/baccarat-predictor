@@ -294,6 +294,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     <aside class="slip col" aria-labelledby="h-odds">
       <section class="panel">
         <h2 id="h-odds">Next hand</h2>
+        <div class="banner" id="emptyBanner" role="status" hidden></div>
         <div class="banner" id="csmBanner" role="status" hidden>
           <span>Reshuffle mode is on, so the cards you enter don't change these odds. Evolution's live tables deal from a shoe, so turn it off.</span>
           <button class="btn" id="csmOff" type="button">Turn off reshuffle mode</button>
@@ -579,6 +580,17 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
   }
   function renderOdds() {
     $('csmBanner').hidden = !state.csm;
+    // Explain why the odds still match a full shoe when no cards have been removed.
+    const pending = draftCards().length > 0;
+    const resultsOnly = state.events.some(e => e.t === 'result');
+    const empty = !state.csm && knownRemoved().length === 0;
+    let msg = '';
+    if (pending && plan(state.draft).complete) msg = 'Press Record hand (or Enter) to add this hand. The odds update once it is recorded.';
+    else if (pending) msg = 'Finish entering this hand and record it. The odds update once it is recorded.';
+    else if (empty && resultsOnly) msg = 'Results alone don\'t change the odds. Enter each hand\'s cards and press Record hand to update them.';
+    else if (empty) msg = 'No cards entered yet, so these are full-shoe odds. Enter each hand\'s cards and press Record hand to update them.';
+    $('emptyBanner').textContent = msg;
+    $('emptyBanner').hidden = !msg;
     const left = cardsLeft();
     if (!state.csm && left < 6) {
       $('calcNote').textContent = 'Fewer than 6 cards left. Start a new shoe.';
@@ -636,6 +648,8 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     if (state.mode === 'hand') { if (!fillNext(rank)) return; }
     else state.events.push({ t: 'card', c: rank });
     render();
+    // A finished hand puts focus on Record hand, so Enter or Space records it.
+    if (state.mode === 'hand' && plan(state.draft).complete) $('recordBtn').focus();
   }
   function backspace() {
     startReal();
@@ -736,7 +750,9 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     const rank = KEYMAP[k] || (/^[2-9]$/.test(k) ? k : null);
     if (rank) { e.preventDefault(); addRank(rank); return; }
     if (e.key === 'Backspace') { e.preventDefault(); backspace(); return; }
-    if (e.key === 'Enter' && state.mode === 'hand' && !e.target.closest('button')) { e.preventDefault(); recordHand(); }
+    // Enter records a finished hand, even when focus is still on a card key, slot or tab.
+    if (e.key === 'Enter' && state.mode === 'hand' && plan(state.draft).complete
+      && (!e.target.closest('button') || e.target.closest('.key, .slot, .tab'))) { e.preventDefault(); recordHand(); }
   });
 
   render();
