@@ -117,7 +117,11 @@ textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid va
 .pick .who { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; }
 .pick .who.B { color: var(--banker); } .pick .who.P { color: var(--player); }
 .bars { display: flex; flex-direction: column; gap: 10px; }
-.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 72px; gap: 10px; align-items: center; }
+.banner { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 14px; font-weight: 500; }
+.banner .btn { align-self: flex-start; }
+.delta { display: block; font-size: 11px; color: var(--muted); }
+.delta.up { color: var(--tie); } .delta.down { color: var(--banker); }
+.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 84px; gap: 10px; align-items: center; }
 .track { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .fill { height: 100%; border-radius: 999px; transition: width .25s ease; }
 .fill.B { background: var(--banker); } .fill.P { background: var(--player); } .fill.T { background: var(--tie); }
@@ -290,6 +294,10 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
     <aside class="slip col" aria-labelledby="h-odds">
       <section class="panel">
         <h2 id="h-odds">Next hand</h2>
+        <div class="banner" id="csmBanner" role="status" hidden>
+          <span>Reshuffle mode is on, so the cards you enter don't change these odds. Evolution's live tables deal from a shoe, so turn it off.</span>
+          <button class="btn" id="csmOff" type="button">Turn off reshuffle mode</button>
+        </div>
         <div class="pick">
           <span class="label">Best bet</span>
           <span class="who" id="pickWho">Banker</span>
@@ -302,6 +310,7 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
         </table>
         <p class="note" id="calcNote"></p>
         <p class="note" id="b6Note"></p>
+        <p class="note">Small numbers under each percentage show the change from a full shoe.</p>
       </section>
       <section class="panel">
         <h2>How to read this</h2>
@@ -564,17 +573,28 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
         <span class="hands"><span class="p">Player ${e.p.join(' ')} = ${tot(e.p)}</span><span class="b">Banker ${e.b.join(' ')} = ${tot(e.b)}</span></span>
         <span class="dot ${e.r}" title="${NAMES[e.r]}">${e.r}</span></li>`).join('');
   }
+  const freshCache = {};
+  function freshOdds() {
+    return freshCache[state.decks] ||= exactOdds(valueCounts(true));
+  }
   function renderOdds() {
+    $('csmBanner').hidden = !state.csm;
     const left = cardsLeft();
     if (!state.csm && left < 6) {
       $('calcNote').textContent = 'Fewer than 6 cards left. Start a new shoe.';
       return;
     }
     const o = exactOdds(valueCounts(state.csm));
+    const full = freshOdds();
+    const delta = k => {
+      const d = (o[k] - full[k]) * 100;
+      if (Math.abs(d) < 0.0005) return '<span class="delta">full shoe</span>';
+      return `<span class="delta ${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(3)}</span>`;
+    };
     $('bars').innerHTML = ['B', 'P', 'T'].map(k =>
       `<div class="bar-row"><span>${NAMES[k]}</span>
         <div class="track" role="img" aria-label="${NAMES[k]} ${pct(o[k])}"><div class="fill ${k}" style="width:${(o[k] * 100).toFixed(2)}%"></div></div>
-        <span class="pct mono">${pct(o[k])}</span></div>`).join('');
+        <span class="pct mono">${pct(o[k])}${delta(k)}</span></div>`).join('');
     // Ties push on Banker and Player bets.
     const noCommission = state.game === 'nc';
     // No Commission: Banker pays 1 to 1, except a Banker win on 6 pays 1 to 2.
@@ -707,10 +727,11 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
   });
   $('game').addEventListener('change', e => { state.game = e.target.value; render(); });
   $('csm').addEventListener('change', e => { state.csm = e.target.checked; render(); });
+  $('csmOff').addEventListener('click', () => { state.csm = false; render(); });
 
   const KEYMAP = { A: 'A', 1: 'A', 0: '10', T: '10', J: 'J', Q: 'Q', K: 'K' };
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('textarea, input, select')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('textarea, input:not([type="checkbox"]), select')) return;
     const k = e.key.toUpperCase();
     const rank = KEYMAP[k] || (/^[2-9]$/.test(k) ? k : null);
     if (rank) { e.preventDefault(); addRank(rank); return; }
