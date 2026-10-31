@@ -63,7 +63,13 @@ h2 { font-family: var(--font-display); font-size: 18px; margin: 0; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 24px; align-items: start; }
-@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } .slip { order: -1; } }
+/* Narrow screens and the extension side panel: odds first, entry next, reading notes last. */
+@media (max-width: 860px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .grid > .slip { display: contents; }
+  .grid > .slip > section:first-child { order: -1; }
+  .grid > .slip > section:last-child { order: 1; }
+}
 .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 section.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

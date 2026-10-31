@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shoe Odds Calculator</title>
+<style>
+body { margin: 0; }
+img { max-width: 100%; }
+/* Layout: two-column table-side tool — shoe input on the left, live odds slip pinned on the right; stacks odds-first on phones. */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #18221d;
+  --muted: #5b6a62;
+  --line: #d7ddd8;
+  --felt: #1f5a46;
+  --felt-soft: #e2eee8;
+  --banker: #c0392b;
+  --banker-soft: #f8e3e0;
+  --player: #2155b8;
+  --player-soft: #e1e9f8;
+  --tie: #2f8a4c;
+  --tie-soft: #e0f1e5;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101613; --surface: #17201b; --ink: #e6ece8; --muted: #9aaba2; --line: #2b3832;
+    --felt: #5fbf98; --felt-soft: #1c3229;
+    --banker: #f0796b; --banker-soft: #3a1f1c; --player: #7fa6f0; --player-soft: #1c2740;
+    --tie: #6fcf8d; --tie-soft: #1a3323; --warn: #e6b65c; --warn-soft: #3a2f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101613; --surface: #17201b; --ink: #e6ece8; --muted: #9aaba2; --line: #2b3832;
+  --felt: #5fbf98; --felt-soft: #1c3229;
+  --banker: #f0796b; --banker-soft: #3a1f1c; --player: #7fa6f0; --player-soft: #1c2740;
+  --tie: #6fcf8d; --tie-soft: #1a3323; --warn: #e6b65c; --warn-soft: #3a2f17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+}
+.wrap {
+  max-width: 1120px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+header { display: flex; flex-direction: column; gap: 6px; }
+h1 { font-family: var(--font-display); font-size: clamp(26px, 4vw, 36px); line-height: 1.1; margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 68ch; }
+h2 { font-family: var(--font-display); font-size: 18px; margin: 0; }
+.label { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 24px; align-items: start; }
+/* Narrow screens and the extension side panel: odds first, entry next, reading notes last. */
+@media (max-width: 860px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .grid > .slip { display: contents; }
+  .grid > .slip > section:first-child { order: -1; }
+  .grid > .slip > section:last-child { order: 1; }
+}
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+section.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.spread { justify-content: space-between; }
+
+button, select, textarea, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--felt); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--felt); border-color: var(--felt); color: var(--surface); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.keypad { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 480px) { .keypad { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.key {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+  padding: 10px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.key:hover:not(:disabled) { border-color: var(--felt); background: var(--felt-soft); }
+.key:disabled { opacity: .4; cursor: not-allowed; }
+.key .rank { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; }
+.key .left { font-size: 11px; color: var(--muted); }
+
+.cards { display: flex; flex-wrap: wrap; gap: 6px; min-height: 34px; }
+.card {
+  font-family: var(--font-mono); font-weight: 500; font-size: 14px;
+  min-width: 30px; padding: 4px 6px; text-align: center;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--bg);
+}
+.card.zero { color: var(--muted); }
+.empty { color: var(--muted); font-size: 14px; }
+textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); font-family: var(--font-mono); font-size: 14px; }
+.err { color: var(--banker); font-size: 13px; margin: 0; }
+
+.outcome { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ob { border-radius: 8px; border: 1px solid transparent; padding: 9px 6px; font-weight: 600; }
+.ob.b { background: var(--banker-soft); color: var(--banker); border-color: var(--banker); }
+.ob.p { background: var(--player-soft); color: var(--player); border-color: var(--player); }
+.ob.t { background: var(--tie-soft); color: var(--tie); border-color: var(--tie); }
+
+.bead-scroll { overflow-x: auto; padding-bottom: 4px; }
+.bead { display: grid; grid-auto-flow: column; grid-template-rows: repeat(6, 26px); grid-auto-columns: 26px; gap: 3px; width: max-content; }
+.bead .cell { border: 1px solid var(--line); border-radius: 4px; }
+.dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--surface); }
+.dot.B { background: var(--banker); } .dot.P { background: var(--player); } .dot.T { background: var(--tie); }
+
+.slip { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 860px) { .slip { position: static; } }
+.pick { border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 4px; background: var(--felt-soft); }
+.pick .who { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; }
+.pick .who.B { color: var(--banker); } .pick .who.P { color: var(--player); }
+.bars { display: flex; flex-direction: column; gap: 10px; }
+.banner { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 14px; font-weight: 500; }
+.banner .btn { align-self: flex-start; }
+.delta { display: block; font-size: 11px; color: var(--muted); }
+.delta.up { color: var(--tie); } .delta.down { color: var(--banker); }
+.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 84px; gap: 10px; align-items: center; }
+.track { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.fill { height: 100%; border-radius: 999px; transition: width .25s ease; }
+.fill.B { background: var(--banker); } .fill.P { background: var(--player); } .fill.T { background: var(--tie); }
+.pct { text-align: right; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 0; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.neg { color: var(--banker); } .pos { color: var(--tie); font-weight: 600; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.ok { background: var(--tie-soft); color: var(--tie); }
+.chip.ex { background: var(--warn-soft); color: var(--warn); }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.check input { margin-top: 4px; }
+.facts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+.burn { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+.burn .label { grid-column: 1 / -1; }
+@media (max-width: 480px) { .burn { grid-template-columns: minmax(0, 1fr); } }
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; align-self: flex-start; }
+.tab { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; font-weight: 500; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+
+.board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.side { border: 1px solid; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.side.player { background: var(--player-soft); border-color: var(--player); }
+.side.banker { background: var(--banker-soft); border-color: var(--banker); }
+.side-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; }
+.side.player .side-head { color: var(--player); }
+.side.banker .side-head { color: var(--banker); }
+.total { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.slot {
+  aspect-ratio: 5 / 7; max-width: 100%; min-width: 0; padding: 4px;
+  border: 1px dashed var(--muted); background: var(--surface); border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.slot .val { font-family: var(--font-display); font-size: 24px; font-weight: 700; line-height: 1; }
+.slot .ord { font-size: 11px; color: var(--muted); }
+.slot.filled { border-style: solid; border-color: var(--ink); }
+.slot.active { border: 2px solid var(--felt); box-shadow: 0 0 0 3px var(--felt-soft); }
+.slot.none { background: transparent; border-color: var(--line); color: var(--muted); font-size: 11px; text-align: center; line-height: 1.3; }
+.status { font-size: 14px; margin: 0; min-height: 21px; }
+.status .win-B { color: var(--banker); } .status .win-P { color: var(--player); } .status .win-T { color: var(--tie); }
+
+.hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 14px; }
+.hist li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding-block: 7px; border-bottom: 1px solid var(--line); }
+.hist .num { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.hist .hands { display: flex; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.hist .p { color: var(--player); } .hist .b { color: var(--banker); }
+.hist .dot { width: 22px; height: 22px; font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .fill { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Shoe Odds Calculator</h1>
+    <p class="lede">Enter every card dealt from the current shoe. The calculator works out the exact Banker, Player and Tie odds for the next hand from the cards left in the shoe.</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel" aria-labelledby="h-cards">
+        <div class="row spread">
+          <h2 id="h-cards">Enter cards</h2>
+          <span id="exampleChip" class="chip ex" hidden>Example shoe, clear to start yours</span>
+        </div>
+        <div class="burn">
+          <label class="label" for="burnRank">Burn card (turned face-up at the start of the shoe)</label>
+          <select id="burnRank">
+            <option value="">Not recorded</option>
+            <option>A</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option>
+            <option>8</option><option>9</option><option>10</option><option>J</option><option>Q</option><option>K</option>
+          </select>
+          <p class="note" id="burnNote"></p>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Entry mode">
+          <button class="tab" role="tab" id="tabHand" type="button" data-mode="hand" aria-controls="handMode">By hand</button>
+          <button class="tab" role="tab" id="tabCard" type="button" data-mode="card" aria-controls="cardMode">Card by card</button>
+        </div>
+
+        <div id="handMode" role="tabpanel" aria-labelledby="tabHand" class="col" style="gap:12px">
+          <div class="board">
+            <div class="side player">
+              <div class="side-head"><span>Player</span><span class="total" id="pTotal">–</span></div>
+              <div class="slots" id="pSlots"></div>
+            </div>
+            <div class="side banker">
+              <div class="side-head"><span>Banker</span><span class="total" id="bTotal">–</span></div>
+              <div class="slots" id="bSlots"></div>
+            </div>
+          </div>
+          <p class="status" id="handStatus" aria-live="polite"></p>
+          <div class="row">
+            <button class="btn primary" id="recordBtn" type="button">Record hand</button>
+            <button class="btn" id="clearHandBtn" type="button">Clear hand</button>
+          </div>
+        </div>
+
+        <div class="keypad" id="keypad" role="group" aria-label="Card ranks"></div>
+        <p class="note">Keyboard: A, 2–9, 0 for 10, J, Q, K. Backspace fixes the last card. Enter records the hand.</p>
+
+        <div id="cardMode" role="tabpanel" aria-labelledby="tabCard" class="col" style="gap:12px">
+          <div class="row spread">
+            <span class="label">Every card dealt, in order</span>
+            <button class="btn" id="undoBtn" type="button">Undo last card</button>
+          </div>
+          <div class="cards" id="cardList" aria-live="polite"></div>
+        </div>
+
+        <form id="pasteForm" class="col" style="gap:8px">
+          <label class="label" for="pasteInput" id="pasteLabel">Type cards</label>
+          <textarea id="pasteInput" placeholder="9 K 4 7"></textarea>
+          <p class="err" id="pasteErr" hidden></p>
+          <div class="row"><button class="btn" type="submit" id="pasteBtn">Add cards</button></div>
+        </form>
+
+        <div class="row spread">
+          <span class="label"><span id="dealtCount" class="mono">0</span> dealt · <span id="leftCount" class="mono">416</span> left</span>
+          <button class="btn" id="clearBtn" type="button">New shoe</button>
+        </div>
+        <div id="clearConfirm" class="row" hidden>
+          <span class="note">Clear all cards, hands and results?</span>
+          <button class="btn primary" id="clearYes" type="button">Clear shoe</button>
+          <button class="btn" id="clearNo" type="button">Keep</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-road">
+        <div class="row spread">
+          <h2 id="h-road">This shoe</h2>
+          <button class="btn" id="undoResult" type="button">Undo last result</button>
+        </div>
+        <div id="manualResults" class="col" style="gap:8px">
+          <span class="label">Record a result without its cards</span>
+          <div class="outcome">
+            <button class="ob b" type="button" data-r="B">Banker</button>
+            <button class="ob p" type="button" data-r="P">Player</button>
+            <button class="ob t" type="button" data-r="T">Tie</button>
+          </div>
+        </div>
+        <div class="bead-scroll"><div class="bead" id="bead" aria-label="Bead plate"></div></div>
+        <p class="note" id="streakNote"></p>
+        <ol class="hist" id="history" aria-label="Recorded hands, newest first"></ol>
+      </section>
+
+      <section class="panel" aria-labelledby="h-set">
+        <h2 id="h-set">Table settings</h2>
+        <div class="settings">
+          <div class="field">
+            <label class="label" for="game">Game</label>
+            <select id="game">
+              <option value="nc">No Commission (Banker 6 pays half)</option>
+              <option value="std">Standard (Banker pays 0.95)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="decks">Decks in shoe</label>
+            <select id="decks"><option value="8">8 decks</option><option value="6">6 decks</option></select>
+          </div>
+          <label class="check" for="csm"><input type="checkbox" id="csm"> <span>Table reshuffles after every hand (continuous shuffler or RNG). Past cards are ignored.</span></label>
+        </div>
+      </section>
+    </div>
+
+    <aside class="slip col" aria-labelledby="h-odds">
+      <section class="panel">
+        <h2 id="h-odds">Next hand</h2>
+        <div class="banner" id="emptyBanner" role="status" hidden></div>
+        <div class="banner" id="csmBanner" role="status" hidden>
+          <span>Reshuffle mode is on, so the cards you enter don't change these odds. Evolution's live tables deal from a shoe, so turn it off.</span>
+          <button class="btn" id="csmOff" type="button">Turn off reshuffle mode</button>
+        </div>
+        <div class="pick">
+          <span class="label">Best bet</span>
+          <span class="who" id="pickWho">Banker</span>
+          <span id="pickChip" class="chip warn" style="align-self:flex-start">Every bet loses on average</span>
+        </div>
+        <div class="bars" id="bars"></div>
+        <table>
+          <thead><tr><th>Bet</th><th class="num">Pays</th><th class="num">Expected per 100</th></tr></thead>
+          <tbody id="evBody"></tbody>
+        </table>
+        <p class="note" id="calcNote"></p>
+        <p class="note" id="b6Note"></p>
+        <p class="note">Small numbers under each percentage show the change from a full shoe.</p>
+      </section>
+      <section class="panel">
+        <h2>How to read this</h2>
+        <ul class="facts">
+          <li>The best bet is the one that loses the least on average. It still loses about 49% of the time.</li>
+          <li>Streaks and road patterns don't change the odds. In a 3.2 million hand simulation, Banker won about 50.7% of decided hands after every pattern tested.</li>
+          <li>Only the cards left in the shoe move the numbers, and usually by a fraction of a percent.</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+<script src="sidepanel.js"></script>
+</body>
+</html>
