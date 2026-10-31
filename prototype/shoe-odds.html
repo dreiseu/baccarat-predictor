@@ -121,7 +121,10 @@ textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid va
 @media (max-width: 860px) { .slip { position: static; } }
 .pick { border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 4px; background: var(--felt-soft); }
 .pick .who { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.1; }
-.pick .who.B { color: var(--banker); } .pick .who.P { color: var(--player); }
+.pick .who.B, .pick .sub .B { color: var(--banker); } .pick .who.P, .pick .sub .P { color: var(--player); } .pick .sub .T { color: var(--tie); }
+.pick .lead { font-size: 14px; color: var(--muted); }
+.pick .sub { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); font-size: 14px; }
+.pick .sub strong { font-weight: 600; }
 .bars { display: flex; flex-direction: column; gap: 10px; }
 .banner { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 14px; font-weight: 500; }
 .banner .btn { align-self: flex-start; }
@@ -306,9 +309,13 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
           <button class="btn" id="csmOff" type="button">Turn off reshuffle mode</button>
         </div>
         <div class="pick">
-          <span class="label">Best bet</span>
-          <span class="who" id="pickWho">Banker</span>
-          <span id="pickChip" class="chip warn" style="align-self:flex-start">Every bet loses on average</span>
+          <span class="label">Most likely to win</span>
+          <span class="who" id="likelyWho">Banker</span>
+          <span class="lead mono" id="likelyLead"></span>
+          <div class="sub">
+            <span>Best value bet: <strong id="pickWho">Player</strong></span>
+            <span id="pickChip" class="chip warn">Every bet loses on average</span>
+          </div>
         </div>
         <div class="bars" id="bars"></div>
         <table>
@@ -322,7 +329,8 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
       <section class="panel">
         <h2>How to read this</h2>
         <ul class="facts">
-          <li>The best bet is the one that loses the least on average. It still loses about 49% of the time.</li>
+          <li>Most likely to win is the side with the higher chance from the cards left. It's usually ahead by only about 1 point, so it still loses about 49 of every 100 hands that aren't ties.</li>
+          <li>Best value bet is the one that loses the least money on average once payouts are counted. At No Commission tables that's usually Player, because a Banker win on 6 pays only half.</li>
           <li>Streaks and road patterns don't change the odds. In a 3.2 million hand simulation, Banker won about 50.7% of decided hands after every pattern tested.</li>
           <li>Only the cards left in the shoe move the numbers, and usually by a fraction of a percent.</li>
         </ul>
@@ -623,9 +631,15 @@ select { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; b
       const v = ev[k] * 100;
       return `<tr><td>${NAMES[k]}</td><td class="num">${pays[k]}</td><td class="num ${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td></tr>`;
     }).join('');
+    // Ties are never the likeliest outcome, so the likeliest winner is Banker or Player.
+    const likely = o.P > o.B ? 'P' : 'B';
+    const other = likely === 'B' ? 'P' : 'B';
+    const lw = $('likelyWho');
+    lw.textContent = `${NAMES[likely]} ${pct(o[likely])}`; lw.className = 'who ' + likely;
+    $('likelyLead').textContent = `${NAMES[other]} ${pct(o[other])}, ${((o[likely] - o[other]) * 100).toFixed(3)} points behind`;
     const best = ['B', 'P', 'T'].reduce((a, b) => ev[b] > ev[a] ? b : a);
     const who = $('pickWho');
-    who.textContent = NAMES[best]; who.className = 'who ' + best;
+    who.textContent = NAMES[best]; who.className = best;
     const chip = $('pickChip');
     if (ev[best] > 0) { chip.className = 'chip ok'; chip.textContent = `Small edge: +${(ev[best] * 100).toFixed(2)} per 100`; }
     else { chip.className = 'chip warn'; chip.textContent = 'Every bet loses on average'; }

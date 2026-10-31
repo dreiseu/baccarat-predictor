@@ -290,9 +290,15 @@
       const v = ev[k] * 100;
       return `<tr><td>${NAMES[k]}</td><td class="num">${pays[k]}</td><td class="num ${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}</td></tr>`;
     }).join('');
+    // Ties are never the likeliest outcome, so the likeliest winner is Banker or Player.
+    const likely = o.P > o.B ? 'P' : 'B';
+    const other = likely === 'B' ? 'P' : 'B';
+    const lw = $('likelyWho');
+    lw.textContent = `${NAMES[likely]} ${pct(o[likely])}`; lw.className = 'who ' + likely;
+    $('likelyLead').textContent = `${NAMES[other]} ${pct(o[other])}, ${((o[likely] - o[other]) * 100).toFixed(3)} points behind`;
     const best = ['B', 'P', 'T'].reduce((a, b) => ev[b] > ev[a] ? b : a);
     const who = $('pickWho');
-    who.textContent = NAMES[best]; who.className = 'who ' + best;
+    who.textContent = NAMES[best]; who.className = best;
     const chip = $('pickChip');
     if (ev[best] > 0) { chip.className = 'chip ok'; chip.textContent = `Small edge: +${(ev[best] * 100).toFixed(2)} per 100`; }
     else { chip.className = 'chip warn'; chip.textContent = 'Every bet loses on average'; }
